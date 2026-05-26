@@ -19,7 +19,7 @@ class Player(pygame.sprite.Sprite):
     def __init__(self) -> None:
         super().__init__()
         # ※実際の画像ファイルがある場合は以下のコメントアウトを外して差し替える
-        self.image = pygame.image.load("fig/3.png")
+        self.image = pygame.image.load("ex5/fig/3.png")
         self.image = pygame.transform.flip(self.image, True, False)
         
         self.rect = self.image.get_rect()
