@@ -1,10 +1,12 @@
 """
 重力アクションゲーム（フラッピーバード風）のベースコード
 """
-
+import os
 import pygame as pg
 import sys
 import random
+
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 # 画面サイズの設定
 WIDTH = 800
@@ -17,12 +19,16 @@ class Player(pg.sprite.Sprite):
     def __init__(self) -> None:
         super().__init__()
         # ※実際の画像ファイルがある場合は以下のコメントアウトを外して差し替える
-        self.image = pg.image.load("ex5/fig/3.png")
+        self.image = pg.image.load("fig/3.png")
         self.image = pg.transform.flip(self.image, True, False)
         
         self.rect = self.image.get_rect()
         self.rect.center = (150, HEIGHT // 2)
         self.vy = 0.0 # Y方向の落下速度
+
+        #透明化状態
+        self.transparent = False
+        self.transparent_timer = 0
 
     def update(self) -> None:
         """
@@ -31,11 +37,25 @@ class Player(pg.sprite.Sprite):
         self.vy += 0.5 
         self.rect.y += int(self.vy)
 
+     #透明化タイマー
+        if self.transparent:
+            self.transparent_timer -= 1
+
+            if self.transparent_timer <= 0:
+                self.transparent = False
+                self.image.set_alpha(255)
+
+
     def jump(self) -> None:
         """
         スペースキー押下によるジャンプ処理
         """
         self.vy = -8.0 
+
+    def activate_transparent(self):
+        self.transparent = True
+        self.transparent_timer = 300
+        self.image.set_alpha(128)
         
 class Score():
     """
@@ -106,7 +126,7 @@ class Item(pg.sprite.Sprite):
         if self.rect.right < 0:
             self.kill()
     
-    def activate(self, score: Score) -> None:
+    def activate(self, player, score: Score) -> None:
         """
         アイテムを拾った時の効果(子クラスごとに処理を上書き)
         """
@@ -118,7 +138,7 @@ class CoinItem(Item):
     def __init__(self, x:int, y:int) -> None:
         super().__init__(x,y,(255,215,0))
     
-    def activate(self, score: Score) -> None:
+    def activate(self, player, score: Score) -> None:
         #コインの効果:スコアを1000増加
         score.value += 1000
 
@@ -132,8 +152,10 @@ class sanbai(Item):
         self.image.fill((255, 0, 0))  # スコア3倍は赤色のダミー四角形
         self.rect = self.image.get_rect(center = (x,y))
     
-    def activate(self, score: Score):
+    def activate(self, player, score: Score):
         score.activate_multiplier(3,10)
+
+        
 class Obstacle(pg.sprite.Sprite):
     """
     障害物に関するクラス
@@ -165,6 +187,15 @@ def draw_text(screen: pg.Surface, text: str, size: int, x: int, y: int, color: t
     screen.blit(surface, rect)
 
 
+class TransparentItem(Item):
+    def __init__(self, x:int, y:int) -> None:
+        super().__init__(x,y,(0,0,255))
+
+    def activate(self, player, score):
+        player.activate_transparent()
+        
+
+
 
 def main():
     pg.init()
@@ -185,15 +216,16 @@ def main():
     SPAWN_OBSTACLE = pg.USEREVENT + 1
     pg.time.set_timer(SPAWN_OBSTACLE, 1500)
 
-    # アイテム生成用のカスタムイベント（2秒ごとに抽選）
-    SPAWN_ITEM = pg.USEREVENT + 3
-    pg.time.set_timer(SPAWN_ITEM, 2000)
 
     # スコアインスタンスの生成
     score = Score()
 
     state = "countdown"   
     countdown_start_time = pg.time.get_ticks()
+
+    #アイテム生成イベント
+    SPAWN_ITEM = pg.USEREVENT +2
+    pg.time.set_timer(SPAWN_ITEM, 5000)
 
     running = True
     while running:
@@ -225,12 +257,21 @@ def main():
 
             # アイテムのランダム生成
             if event.type == SPAWN_ITEM:
-            # 40%の確率で3倍アイテムを生成
-                if random.random() < 0.4:
-                    item_y = random.randint(100, HEIGHT - 100)
+                item_y = random.randint(100,HEIGHT -100)
+                r = random.random()
+
+                if r < 0.4:
                     item = sanbai(WIDTH, item_y)
-                    items.add(item)
-                    all_sprites.add(item)
+                else:
+                    item = TransparentItem(WIDTH, item_y)
+
+                items.add(item)
+                all_sprites.add(item)
+            # # 40%の確率で3倍アイテムを生成
+
+
+        
+
 
         # 背景と全Spriteの描画
         screen.fill((135, 206, 235)) # ※背景画像がある場合は blit に変更
@@ -258,11 +299,12 @@ def main():
             # こうかとんとアイテムの当たり判定（接触時にアイテムを消滅させる）
             hit_items = pg.sprite.spritecollide(player, items, True)
             for item in hit_items:
-                item.activate(score) #獲得したアイテムの効果を発動
+                item.activate(player, score) #獲得したアイテムの効果を発動
 
             # こうかとんと障害物の当たり判定、および画面上下端の判定
-            if pg.sprite.spritecollide(player, obstacles, False) or player.rect.top < 0 or player.rect.bottom > HEIGHT:
-                state = "gameover"
+            if not player.transparent:
+                if pg.sprite.spritecollide(player, obstacles, False) or player.rect.top < 0 or player.rect.bottom > HEIGHT:
+                    state = "gameover"
         
             all_sprites.draw(screen)
             score.update(screen)
