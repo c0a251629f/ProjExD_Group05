@@ -1,10 +1,12 @@
 """
 重力アクションゲーム（フラッピーバード風）のベースコード
 """
-
+import os
 import pygame as pg
 import sys
 import random
+
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 # 画面サイズの設定
 WIDTH = 800
@@ -17,7 +19,7 @@ class Player(pg.sprite.Sprite):
     def __init__(self) -> None:
         super().__init__()
         # ※実際の画像ファイルがある場合は以下のコメントアウトを外して差し替える
-        self.image = pg.image.load("ex5/fig/3.png")
+        self.image = pg.image.load("fig/3.png")
         self.image = pg.transform.flip(self.image, True, False)
         
         self.rect = self.image.get_rect()
