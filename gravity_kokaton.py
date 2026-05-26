@@ -8,13 +8,14 @@ import random
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-# 画面サイズの設定
+# 画面サイズ
 WIDTH = 800
 HEIGHT = 600
 
+
 class Player(pg.sprite.Sprite):
     """
-    主人公キャラクター（こうかとん）に関するクラス
+    主人公キャラクター（こうかとん）
     """
     def __init__(self) -> None:
         super().__init__()
@@ -24,7 +25,10 @@ class Player(pg.sprite.Sprite):
         
         self.rect = self.image.get_rect()
         self.rect.center = (150, HEIGHT // 2)
-        self.vy = 0.0 # Y方向の落下速度
+
+        self.vy = 0.0
+        # マスクを作成してピクセル単位当たり判定に対応
+        self.mask = pg.mask.from_surface(self.image)
 
         #透明化状態
         self.transparent = False
@@ -32,9 +36,9 @@ class Player(pg.sprite.Sprite):
 
     def update(self) -> None:
         """
-        重力による落下処理
+        重力処理
         """
-        self.vy += 0.5 
+        self.vy += 0.5
         self.rect.y += int(self.vy)
 
      #透明化タイマー
@@ -48,9 +52,9 @@ class Player(pg.sprite.Sprite):
 
     def jump(self) -> None:
         """
-        スペースキー押下によるジャンプ処理
+        ジャンプ
         """
-        self.vy = -8.0 
+        self.vy = -8.0
 
     def activate_transparent(self):
         self.transparent = True
@@ -158,7 +162,7 @@ class sanbai(Item):
         
 class Obstacle(pg.sprite.Sprite):
     """
-    障害物に関するクラス
+    障害物
     """
     def __init__(self, x: int, y: int, width: int, height: int) -> None:
         super().__init__()
@@ -166,24 +170,78 @@ class Obstacle(pg.sprite.Sprite):
         self.image.fill((0, 255, 0)) # 緑色のダミー四角形
         self.rect = self.image.get_rect()
         self.rect.topleft = (x, y)
+        # マスク（ピクセル単位当たり判定用）
+        self.mask = pg.mask.from_surface(self.image)
 
     def update(self) -> None:
         """
-        左方向へのスクロール処理
+        左へ移動
         """
-        self.rect.x -= 5 
+        self.rect.x -= 5
+
         if self.rect.right < 0:
             self.kill() # 画面外に出たらグループから削除
             
             
-def draw_text(screen: pg.Surface, text: str, size: int, x: int, y: int, color: tuple = (0, 0, 0)) -> None:
+#def draw_text(screen: pg.Surface, text: str, size: int, x: int, y: int, color: tuple = (0, 0, 0)) -> None:
+            #self.kill()
+
+
+class Enemy(pg.sprite.Sprite):
     """
-    画面にテキストを描画するヘルパー関数
+    右から飛んでくる敵
+    """
+    #font = pg.font.SysFont(None, size)
+    def __init__(self) -> None:
+        super().__init__()
+
+        # 敵画像
+        self.image = pg.image.load("fig/6.png")
+        # 視認性向上のため拡大
+        self.image = pg.transform.rotozoom(self.image, 0, 0.6)
+
+        self.rect = self.image.get_rect()
+        # マスク（ピクセル単位当たり判定用）
+        self.mask = pg.mask.from_surface(self.image)
+
+        # 右端から出現
+        self.rect.x = WIDTH
+
+        # ランダムな高さ
+        self.rect.y = random.randint(50, HEIGHT - 50)
+
+        # 左向き速度
+        self.vx = 8
+
+    def update(self) -> None:
+        """
+        左へ移動
+        """
+        self.rect.x -= self.vx
+
+        # 画面外に出たら削除
+        if self.rect.right < 0:
+            self.kill()
+
+
+def draw_text(
+    screen: pg.Surface,
+    text: str,
+    size: int,
+    x: int,
+    y: int,
+    color: tuple = (0, 0, 0)
+) -> None:
+    """
+    テキスト描画
     """
     font = pg.font.SysFont(None, size)
+
     surface = font.render(text, True, color)
+
     rect = surface.get_rect()
     rect.center = (x, y)
+
     screen.blit(surface, rect)
 
 
@@ -208,7 +266,14 @@ def main():
     obstacles = pg.sprite.Group()
     items = pg.sprite.Group()
 
-    # 主人公の生成
+    clock = pg.time.Clock()
+
+    # グループ
+    all_sprites = pg.sprite.Group()
+    obstacles = pg.sprite.Group()
+    enemies = pg.sprite.Group()
+
+    # プレイヤー生成
     player = Player()
     all_sprites.add(player)
 
@@ -226,20 +291,56 @@ def main():
     #アイテム生成イベント
     SPAWN_ITEM = pg.USEREVENT +2
     pg.time.set_timer(SPAWN_ITEM, 5000)
+    # 障害物イベント
+    SPAWN_OBSTACLE = pg.USEREVENT + 1
+    pg.time.set_timer(SPAWN_OBSTACLE, 1500)
+
+    # スコアイベント
+    #ADD_SCORE = pg.USEREVENT + 2
+    #pg.time.set_timer(ADD_SCORE, 1000)
+
+    # 敵生成イベント
+    SPAWN_ENEMY = pg.USEREVENT + 3
+    pg.time.set_timer(SPAWN_ENEMY, 2000)
+
+    countdown_start_time = pg.time.get_ticks()
+    restart_button_rect = pg.Rect(WIDTH // 2 - 100, HEIGHT // 2 + 150, 200, 60)
 
     running = True
+
     while running:
+
         for event in pg.event.get():
+
             if event.type == pg.QUIT:
                 running = False
-            
-            # スペースキー入力時のジャンプ処理
+
+            # ジャンプ
             if event.type == pg.KEYDOWN:
                 if event.key == pg.K_SPACE and state == "playing":
                     player.jump()
-            
-            # 障害物とコインのランダム生成
+
+            if event.type == pg.MOUSEBUTTONDOWN:
+                if state == "gameover" and restart_button_rect.collidepoint(event.pos):
+                    obstacles.empty()
+                    enemies.empty()
+                    all_sprites.empty()
+                    player.rect.center = (150, HEIGHT // 2)
+                    player.vy = 0.0
+                    all_sprites.add(player)
+                    # スコアオブジェクトをリセット
+                    if isinstance(score, Score):
+                        score.value = 0
+                        score.multiplier = 1
+                        score.multiplier_timer = 0
+                    else:
+                        score = Score()
+                    state = "countdown"
+                    countdown_start_time = pg.time.get_ticks()
+
+            # 障害物生成
             if event.type == SPAWN_OBSTACLE and state == "playing":
+
                 gap_y = random.randint(150, HEIGHT - 150)
                 gap_size = 150
                 
@@ -273,27 +374,93 @@ def main():
         
 
 
-        # 背景と全Spriteの描画
-        screen.fill((135, 206, 235)) # ※背景画像がある場合は blit に変更
-        
+                # top_obs = Obstacle(
+                #     WIDTH,
+                #     0,
+                #     50,
+                #     gap_y - gap_size // 2
+                # )
+
+                # bottom_obs = Obstacle(
+                #     WIDTH,
+                #     gap_y + gap_size // 2,
+                #     50,
+                #     HEIGHT - (gap_y + gap_size // 2)
+                # )
+
+                # obstacles.add(top_obs, bottom_obs)
+                # all_sprites.add(top_obs, bottom_obs)
+
+            # 敵生成
+            if event.type == SPAWN_ENEMY and state == "playing":
+
+                enemy = Enemy()
+
+                enemies.add(enemy)
+                all_sprites.add(enemy)
+
+            # スコア加算
+            #if event.type == ADD_SCORE and state == "playing":
+                #score += 100
+
+        # 背景
+        screen.fill((135, 206, 235))
+
+        # カウントダウン
         if state == "countdown":
+
             all_sprites.draw(screen)
             
+
             now = pg.time.get_ticks()
             elapsed = now - countdown_start_time
-            
+
             if elapsed < 1000:
-                draw_text(screen, "3", 150, WIDTH // 2, HEIGHT // 2, (255, 50, 50))
+                draw_text(
+                    screen,
+                    "3",
+                    150,
+                    WIDTH // 2,
+                    HEIGHT // 2,
+                    (255, 50, 50)
+                )
+
             elif elapsed < 2000:
-                draw_text(screen, "2", 150, WIDTH // 2, HEIGHT // 2, (255, 150, 50))
+                draw_text(
+                    screen,
+                    "2",
+                    150,
+                    WIDTH // 2,
+                    HEIGHT // 2,
+                    (255, 150, 50)
+                )
+
             elif elapsed < 3000:
-                draw_text(screen, "1", 150, WIDTH // 2, HEIGHT // 2, (255, 200, 50))
+                draw_text(
+                    screen,
+                    "1",
+                    150,
+                    WIDTH // 2,
+                    HEIGHT // 2,
+                    (255, 200, 50)
+                )
+
             elif elapsed < 4000:
-                draw_text(screen, "GO!", 150, WIDTH // 2, HEIGHT // 2, (50, 255, 50))
+                draw_text(
+                    screen,
+                    "GO!",
+                    150,
+                    WIDTH // 2,
+                    HEIGHT // 2,
+                    (50, 255, 50)
+                )
+
             else:
-                state = "playing"    
-        
+                state = "playing"
+
+        # プレイ中
         elif state == "playing":
+
             all_sprites.update()
 
             # こうかとんとアイテムの当たり判定（接触時にアイテムを消滅させる）
@@ -303,22 +470,40 @@ def main():
 
             # こうかとんと障害物の当たり判定、および画面上下端の判定
             if not player.transparent:
-                if pg.sprite.spritecollide(player, obstacles, False) or player.rect.top < 0 or player.rect.bottom > HEIGHT:
+                # マスクを使ったピクセル単位の当たり判定に変更
+                hit_obstacle = pg.sprite.spritecollide(player, obstacles, False, pg.sprite.collide_mask)
+                hit_enemy = pg.sprite.spritecollide(player, enemies, False, pg.sprite.collide_mask)
+                if hit_obstacle or hit_enemy or player.rect.top < 0 or player.rect.bottom > HEIGHT:
+                    print("Collision detected: ", "obstacle" if hit_obstacle else "enemy" if hit_enemy else "boundary")
                     state = "gameover"
         
             all_sprites.draw(screen)
             score.update(screen)
                
         elif state == "gameover":
+
             all_sprites.draw(screen)
-            draw_text(screen, "GAME OVER", 120, WIDTH // 2, HEIGHT // 2 - 50, (255, 0, 0))
-            draw_text(screen, f"TOTAL SCORE: {int(score.value)}", 80, WIDTH // 2, HEIGHT // 2 + 50, (255, 255, 255))
-        
+
+            draw_text(
+                screen,
+                "GAME OVER",
+                120,
+                WIDTH // 2,
+                HEIGHT // 2 - 50,
+                (255, 0, 0)
+            )
+
+            draw_text(screen,f"TOTAL SCORE: {int(score.value)}",80,WIDTH // 2,HEIGHT // 2 + 50, (255, 255, 255))
+            pg.draw.rect(screen, (30, 144, 255), restart_button_rect)
+            draw_text(screen,"RESTART",40,restart_button_rect.centerx,restart_button_rect.centery,(255, 255, 255))
+            
+
         pg.display.flip()
         clock.tick(60)
 
     pg.quit()
     sys.exit()
+
 
 if __name__ == "__main__":
     main()
